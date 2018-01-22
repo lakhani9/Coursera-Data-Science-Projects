@@ -1,0 +1,117 @@
+---
+title: "Statistical Inference - Project, Part 2"
+author: "N. Lakhani"
+date: "17 January 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,fig.width=10,fig.height=6,cache=TRUE)
+set.seed(1040)
+
+```
+
+```{r}
+library(ggplot2)
+```
+
+## Synopsis
+
+This report is part of the Coursera project on Statistical Inference. It provides Basic inferential analysis using *ToothGrowth* data. The data is explored for impact of 2 different supplements and dosage on tooth growth length. 
+A hypothesis test is conducted to explore if the difference in mean growth is statistically different given the 2 supplements and their dosage  
+
+
+## Analyze ToothGrowth 
+
+This section does an analysis of toothgrowth data providing
+
+* A basic summary of data
+* Use of hypothesis testing to compare tooth growth by supplement of 'OJ' - Orange Juice or 'VC' - Ascorbic acid and by 'dose'. 
+
+I use a null hypothesis: stating that there is no difference (at a .05 - alpha significance level) of the mean tooth growth between the supplement methods at various doses
+
+#### Assumption
+
+I have assumed that the difference in growths between the 2 supplements is normal, the variance are equal, the data is not paired and the observations are independent 
+
+
+
+#### Basic analysis of data
+
+The code below extracts the basis structure of the data file and statistics of the tooth growth data for each of the 2 supplement methods.
+
+* There are 30 data points for each of the 2 supplement methods 
+* The mean growth of the 'OJ' supplement is 20.66, median at 22.70
+* The mean growth of the 'VC' supplement is 18.81 with median at 19.25
+
+From the boxplot below by supplement & dose, it does appear that the means & median of the growth between the 2 methods seem different across different doses. The ranges also appear to be different. As an example for 0.5 dose the mean for Oranje juice is about 12.5 vs 8 for Ascorbic acid.
+
+I use a hypothesis test to explore if the mean growth corresponding to the 2 supplement methods are statistically different for the 3 different dose levels
+
+
+
+
+
+```{r}
+str(ToothGrowth)
+summary(ToothGrowth[ToothGrowth$supp == 'OJ',])
+summary(ToothGrowth[ToothGrowth$supp == 'VC',])
+levels(ToothGrowth$supp) <- c('Orange Juice','Ascorbic Acid')
+xtabs(ToothGrowth$len ~ ToothGrowth$dose + ToothGrowth$supp)/c(10,10,10)
+
+
+ggplot(ToothGrowth,aes(x=factor(dose),y=len)) + geom_boxplot(aes(fill=supp)) +labs(title = 'Tooth growth by supplement and dosage',x='Dose',y='Tooth length') + facet_grid(.~supp)  
+       
+       
+
+```
+
+
+We will use hypothesis test to test the difference in mean growth between the 2 supplements. 
+
+* The null hypothesis H0: mu1 - mu2 = 0, that is growths for both supplements at same dosage level is identical at a 0.05 signficance level
+
+* The alternative hypothesis Ha: mu1 - mu2 < or > 0, that is the growths are not identical. We use a 2-sided test.
+
+The hypothesis test is conducted using a t.test using R below. Four tests are conducted for a) all dose combined and b) each of the 3 doses, resulting in **p-values** for each test as below:
+
+ 
+
+```{r}
+
+t.test(data=ToothGrowth,len ~ supp,alternative='two.sided',conf.int=.95)
+
+
+t.test(len ~ supp,data=subset(ToothGrowth,dose==0.5),alternative='two.sided')
+
+
+t.test(len ~ supp,data=subset(ToothGrowth,dose==1),alternative='two.sided')
+
+
+t.test(len ~ supp,data=subset(ToothGrowth,dose==2),alternative='two.sided')
+
+
+```
+
+**The t-test results show*:
+
+* for all doses combined, the p value is 0.06 (> 0.05), hence we cannot reject the null hypothesis, the conclusion is that the supplement across doses do not make a difference in growth. The mean growth for orange juice is 20.66 vs 16.96 for Ascorbic acid. 
+* for dose of 0.5, p value is 0.006 (< 0.05), hence we reject the null hypothesis; the conclusion is that the supplement across dose of 0.5 makes a difference and the mean growth for orange juice is 13.23 vs 7.98 for Ascorbic acid
+* for dose of 1, p value is 0.001 (< 0.05), hence we reject the null hypothesis; the conclusion is that the supplement across dose of 1 makes a difference and the mean growth for orange juice is 22.7 vs 16.77 for Ascorbic acid
+* for dose of 2, p value is 0.96 (> 0.05), hence we cannot reject the null hypothesis, the conclusion is that the supplement at dose of 2 makes no difference and the mean growth for orange juice is 26.06 vs 26.147 for Ascorbic acid. The CI for difference in means is [-3.97,3.63]
+
+
+
+#### Conclusion
+
+**Conducted hypothesis tests to examine if the growth supplement made an impact on tooth growth across various doses. The tests show that a difference in growth is statistically valid at dose of 0.5 and 1.0, but does not hold at dose of 2, for a significance level of 0.5**
+
+
+
+
+
+
+
+
