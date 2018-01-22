@@ -1,0 +1,187 @@
+---
+title: "Statistical inference with GSS data - Exploring TV viewing habits by race and each decade since 1972"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+## Introduction
+
+This document summarizes my project work for 'Stats with R' course on Coursera. I have explored how TV viewing habits varies by race and has changed over the last 5 decadses in the US based on GSS data. 
+
+**The objective of this analysis is to get an insight into: Are we really racially different when it comes to our TV viewing habits and has the # of hours TV watched/day changed over the last 5 decades.**
+
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+installed.packages('GGally')
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(GGally)
+library(ggthemes)
+library(RColorBrewer)
+library(grid)
+
+#Load code for inference
+source("http://bit.ly/dasi_inference")
+
+```
+
+### Load data
+
+
+```{r load-data}
+#load("gss.Rdata")
+ 
+
+```
+
+
+* * *
+
+## Part 1: GSS Data
+
+The GSS sampling design methodology has evolved over the years since the first study in 1972. Starting off with a combination of 50% block quota and 50% probability sampling, it has evolved to full probability sampling framework. The full probability sampling framework has also changed over the years. The sampling uses stratification & multi stage area probability sample of clusters of US households. The multistage approach of stratification followed by probability sampling in each strata and then combining the selected participants ensures a representative sample of < 5000 participants. The survey is conducted using questions and a combination of face to face, telephone or online session from the segmented probability sample cluster.
+
+The inference from the survey can be generalized as the sample population is selected randomly. However, causability would not be possible since there is no indication of random assignment. 
+
+An effort is made to remove biases, as an example, by calling during convenient hours for working Americans. Some bias may still be there based on some respondents choosing not to respond.
+
+
+* * *
+
+## Part 2: Research question
+
+#### Does the number of hours per day a US person watches TV vary significantly with the persons race and how has this changed for the overall US population over the last 50 years?  
+
+This analysis will provide insights into how an average US household gets their daily dose of news and entertainment and how it differs by race. 
+
+The variables of interest are Race (categorical),  Number of hours per day of TV ( numerical) variable and Year (categorical).
+ 
+
+
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+In order to clean the data, I  removed all missing observations. I also filtered out data, so that we can focus on changes in viewing habits at intervals of about 10 years (so 1975,1985,1993,2004,2012 was selected arbitrarily) to have a better view of any trends. 
+
+Expectation is that with the huge net options available in last decade for news and entertainment, average TV viewing hours would have trended down.
+
+**Summary statistics for the 2 research questions are produced below**
+
+```{r}
+by (gss$tvhours,gss$race,summary)                          # overall statistics including NA count, NA's will be removed in next step 
+
+gss_new <- subset (gss,gss$tvhours != 'NA')                # remove NAs
+
+gss_new_year <- subset(gss_new,year %in%  c('1975','1985','1993','2004','2012'))  # keep data for approx for every 10th year
+ 
+
+# summary after cleanup by race and every 10th year
+gss_new_year %>% group_by(race) %>% summarise(tv_mean=mean(tvhours),tv_median=median(tvhours),tv_sd=sd(tvhours), n=n())
+gss_new_year %>% group_by(year) %>% summarise(tv_mean=mean(tvhours),tv_median=median(tvhours),tv_sd=sd(tvhours), n=n())
+
+# visual view of tv hours watched by race
+
+ggpairs(gss_new_year, columns=c('tvhours','race'))  # quick view of the 2 variables
+
+ggplot(gss_new_year,aes(gss_new_year$tvhours,fill=factor(race))) + geom_histogram() + facet_grid(~year)  + xlim(0,25) + xlab('# hours/day TV watched')
+ 
+
+
+```
+
+
+From the summary table and histogram above, there is an indication from visual observation that: 
+
+* the mean number of hours TV watched per day varies by race, atleast for one pair (see box plot and histogram from ggpairs)
+* the mean number of TV hours watched per day seems to have peaked in 1993, dipped quite a bit in 2004 and seems to have trended up slightly in 2012.
+
+
+**Would like to now evaluate if the observed variations from the sample are statistically significant and what inferences can we draw for the US population.**
+
+### Hypothesis  
+
+ **Is there a strong relationship between mean number of TV hours watched/day and race?**  
+
+I have chosen 2 races for this: white and black, while dropping the 'other' race as it is close to 'white' in mean & median
+
+* **H0:** there is no significant difference between the mean #of TV hours watched across various races at the 95% confidence level
+* **Ha:** For atleast one pair of races, the mean # of TV hours watched is different from each other and statistically significant 
+
+
+Caclulating the point estimate and standard error for analyis by race
+sd1 = 2.263 and m1 = 2.873 (mean and sd for white race)
+sd2 = 3.119 and m2 = 3.932 (mean and sd for black race)
+ 
+
+```{r}
+by (gss_new_year$tvhours,gss_new_year$race,sd)
+by (gss_new_year$tvhours,gss_new_year$race,mean)
+
+# finding SE and Z for the race pair of 'white' and 'black'
+
+SE <- sqrt(2.263^2/5695 + 3.119^2/785)
+Z  <-  (3.932-2.873)/SE
+SE
+Z
+
+```
+
+**Conditions**
+
+The sample data meets the conditions of:
+
+* Independence within group and between groups as the sample is random and not paired
+* Sample size/skew, the 2 samples are > 30 observations & also < 10% of US population 
+
+**Method to be used**
+An inference is setup to evaluate 
+ *the mean of TV hours watched by race for testing the null hypothesis mentioned earlier
+ * the mean of TV hours watched over the last 5 decades by US population and testing the null hypothesis
+
+
+Also Z calculated above is quite large hence we expect the p value to be very small (or F to be large from Anova)
+
+
+* * *
+
+## Part 4a: Inference test I
+
+The inference is run for mean # of TV hours watched by race
+```{r}
+
+inference(y = gss_new_year$tvhours, x = gss_new_year$race, est = "mean", type = "ht", null = 0, alternative = "greater", method = "theoretical")
+
+
+```
+
+### Inference comments
+
+* The F value is very large implying that the null hypothesis can be rejected. Hence the alternative hypothesis that atleast one mean pair is different between the 3 races is accepted at the 95 confidence level. This imples atleast 2 races have different TV viewing habits in the US population
+* The distribution of the mean difference in TV hours is right skewed with a very long tail
+
+## Part 4b: Inference test II
+
+The inference is also run for mean# of TV hours watched for each of the last 5 decadse (represented by data for 1975,1985,1994,2004,2012
+
+```{r}
+
+inference(y = gss_new_year$tvhours, x = gss_new_year$year, est = "mean", type = "ht", null = 0, alternative = "greater", method = "theoretical")
+
+```
+
+### Inference comments 2
+
+* The F value is quite small though still > 1 and Pr is 0.101. We again reject the null hypothesis stating that the mean # of TV viewing hours has not changed over the 5 decades (year-intervals selected for analysis in each decade) 
+* The distribution of the mean difference in TV hours is right skewed with not as quite a long tail as with race
+* the box plot from inference shows that the median TV hours for the last 2 decades is different from the first 3 year-intervals
+

@@ -1,0 +1,271 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+options (warn = -1)
+suppressMessages(library(ggplot2))
+library(dplyr)
+library(statsr)
+library(GGally)
+library(gridExtra)
+```
+
+### Load data
+
+It is assumed that the compressed dataset (gz) and rmd files are in the same working directory, else please load. 
+
+This command loads the movies data with 651 rows and 32 variables.
+
+```{r load-data}
+
+load("movies.gz")
+
+
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+The IMDB & Rotten Tomatoes are both large databases of movies and entertainment titles with data coming from various sources and cover international titles. The sample database provided for this exercise filters US movies, also movies in the sample provided are for the period 1970 onwards, whereas the IMDB database includes movie data since 1874 (approx 4.6million movies). 
+
+The IMDB dataset contains observational data based collected from various sources and due to size and independent variety of sources could be categorized as random.
+
+The data being used for this project is a random sample focusing on US movie data extracted from the IMBDB database. The distribution of some key variables is examined later.
+
+**As such the inference from this exercise will have generalizability limited to the filters used in selecting the sample that is for US movies and limited to the period 1970-2016. The inference will not have causal use due to lack of random assignment.** 
+ 
+* * *
+
+## Part 2: Research question
+
+As stated in the project, the boss at Paramount Pictures is interested in learning what attributes make a movie popular. The boss is also interested in learning something new about movies. 
+
+Specifically, I have framed the research question as:  
+
+**Can a movie's popularity (imdb_rating is the response variable) be predicted based on other variables in the imdb sample database.**
+
+**Specifically, based on analysis I have narrowed it down to "Can the imdb_rating be predicted from critics_score, audience_score and imdb_num_votes".**
+
+This research would be on interest to predict imdb_ratings of movies and hence have insights into potential top box office hits.
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+I have removed some of the columns, leaving them out of the linear regression analysis, cols 1-12,17, and 25-32. These columns are actor1 thru 5, urls, director, db and other descriptive columns such as title type, genre, runtime, theatre/dvd relase date & month, audience rating (is a factor with 2 levels, leaving the numeric audience rating score in the new dataset since it is quantitative). 
+
+This reduces the dataset to be explored down to 12 columns.
+
+I have also removed the last 7 rows (rows 645 thru 651) and used them as validation/test data to test the model in the prediction phase 
+
+```{r}
+rem_cols <- c(-(2:12),-17,-(25:32))
+movies_new <- movies[-(645:651),rem_cols]
+str(movies_new)
+```
+
+
+I plot out the numerical variables of interest to get a preliminary look at their distribution. 
+
+```{r}
+
+summary(movies_new[,2:6])
+
+ggplot (movies_new,aes(x=imdb_num_votes,fill=best_pic_nom)) + geom_histogram(aes(y=..density..),binwidth=50000,position='dodge') + labs(title='imdb Number of votes by best pic nomination')
+
+ggplot (movies_new,aes(x=critics_score,fill=best_pic_nom)) + geom_histogram(aes(y=..density..),binwidth=10,position='dodge') + labs(title='Critics score by best pic nomination')
+
+ggplot (movies_new,aes(x=audience_score,fill=best_pic_nom)) + geom_histogram(aes(y=..density..),binwidth=10,position='dodge') + labs(title='Audience score by best pic nomination')
+
+
+qqnorm(movies_new$critics_score)
+qqnorm(movies_new$audience_score)
+qqnorm(movies_new$imdb_num_votes)
+
+
+```
+
+The summary data shows the 5 statistics for each of the numerical variables. Observations are as follows:
+
+* the range of imdb_num_votes is large with median << mean, indicating right skew with long tail
+* For audience_score and critics_score, the range is large, but sparse on movies with no best picture nominations
+* the qq normal plots show skews on both extremes
+
+```{r}
+
+ggpairs(movies_new[,2:6])
+
+```
+
+
+The ggpairs plot shows pair plots between these 5 variables. It also shows high collinearity between explanatory variables (audience_score & critics-score): Corr is 0.708 suggesting one of them can be eliminated. However, I have chosen to keep both for now since they do come from independent sources.
+
+
+The imdb_num_votes seem to impact all the score variables. A higher # of votes  indicates higher audience scores and critics score. Whereas the same is not necessarily true at low imdb_num_votes.
+
+
+Based the pairs chart, I did not yet eliminate any of the numerical variables. Would like to do it as part of modeling using their 'p' values  
+
+Next I explore relationship between best_pic_nom, critics_score and audience_score to see which is a better indicator.
+
+```{r}
+p1 <- ggplot(movies_new,aes(y=movies_new$critics_score,x=movies_new$best_pic_nom)) + geom_boxplot() + ylab('Critics score') + xlab('Best picture nomination' ) 
+p2 <- ggplot(movies_new,aes(y=movies_new$audience_score,x=movies_new$best_pic_nom)) + geom_boxplot() + ylab ('Audience score') + xlab('Best picture nomination')
+grid.arrange(p1,p2,ncol=2)
+```
+
+From the above side-by-side box plot, it seems that both critic and audience scores are similar in how they co-relate to best picture nominations. The movies getting nominated have a higher median than movies not high on critic and audience scores. 
+
+Based on this, I eliminated best_pic_nom from the linear regression modelling shown later in this project. I have also dropped critics_rating in favor of critics_score since it is quantitiative and possibly derived from it
+
+Also have explored the imdb_num_votes further as it relates to best_pic_nom and top200_box.
+
+
+```{r}
+
+ggplot (movies_new,aes(y=imdb_num_votes,x=movies_new$top200_box)) + geom_boxplot() + facet_grid(~best_pic_nom) + xlab('Top 200 Box') + ylab('Imdb - number of votes for a movie')
+
+```
+
+**Full Model**
+
+From the above plots & analysis, it seems a linear relationship of imdb_rating with  imdb_num_votes, audience_score, critics_score, best_pic_nom and top200_box could be worth exploring to start with and then drop any features not contributing by looking at p values. 
+
+
+I have selected linear model (lm) to model the relationship between the response variable and 5 explanatory variables using the movies_new dataset which has filtered down from 31 to 12 variables. The linear model was picked as the 5 variables show a reasonable degree of linearity with the response variable.
+
+As the next step, the model is run in multiple iterations to further simplify by:
+
+* examining 'p' values to select a variable to be dropped, and 
+* noting the impact on R-squared.
+
+* * *
+
+## Part 4: Modeling
+
+###1st iteration: 5 explantory variables included:  
+
+**All 5 variables are included in the modeler, giving adj. R-square of 0.8044, highest p = best_pic_nom at .767, which is dropped in the next iteration** 
+
+```{r}
+
+summary(lm(imdb_rating ~ audience_score + critics_score + top200_box + best_pic_nom + imdb_num_votes,data=movies_new))
+
+```
+
+###2nd iteration: drop best_pic_nom
+
+```{r}
+
+summary(lm(imdb_rating ~ audience_score + critics_score + top200_box + imdb_num_votes,data=movies_new))
+
+```
+
+
+###3rd iteration - drop top200_box
+
+With best_pic_nom dropped, we now have R-squared increase to 0.804 with top200_box being the highest p value at .102. I drop this variable and run the modelor again
+
+
+```{r}
+summary(lm(imdb_rating ~ imdb_num_votes + audience_score + critics_score,data=movies_new))
+```
+
+we are left with 3 variables and adj R-squared unchanged at .804. The p values of the 3 remaining variable are << 0, with the highest being for imdb_num_votes. I drop this variable to check the impact, although p is very low for it, almost 0.  
+
+### 4th iteration - dropimdb_num_votes to check impact
+```{r}
+summary(lm(imdb_rating ~ audience_score + critics_score,data=movies_new))
+```
+
+Dropping imdb_num_votes reduces adj R-square to 0.79. I tried dropping the other 2 features individually, both reduce adj R square - hence decided to leave them in the final model.
+
+
+### The final model is 
+
+imdb_rating ~ audience score + critics score + imdb_num_votes 
+
+with adj R square at 0.8021. This implies 80.2% of the variation in imdb_rating is explained by these 3 variables 
+
+
+### Checking for model fit and residual distribution
+
+```{r}
+
+# save the final model in lmfit
+
+lmfit <- lm(imdb_rating ~ imdb_num_votes + audience_score + critics_score,data=movies_new)
+
+
+# scatter and histogram plot for residuals
+hist(lmfit$residuals,col='blue')
+plot(lmfit$residuals,col='blue')
+
+# plot residuals vs fitted values 
+plot(lmfit$residuals ~ lmfit$fitted)
+
+# plot normal distribution, shows left skew as in the histogram. This could be explained by the high_num_votes even for low imdb_ratings
+
+qqnorm(lmfit$residuals,col='blue')
+qqline(lmfit$residuals,col='blue')
+
+```
+
+The above plots show:
+
+* unordered & random distribution of residuals
+* the qq normal plot shows right skews - which could be due to outliers (very low audience, critic scores) 
+
+* * *
+
+## Part 5: Prediction
+
+I have picked 2 movies from the omitted rows 645-651 to test the prediction as mentioned earlier.    
+
+* The Tarzan, with critics score of 88, imdb_num_votes at 134,270 and audience score at 74 
+
+* The "Dance of the Dead", with critics score of 87, imdb_num_votes at 10,087 and audience score at 52
+
+The predict model is run with these 2 movie data
+
+```{r}
+testmovie <- data.frame(title =c("Tarzan","Dance of the Dead"), critics_score = c(88,87),imdb_num_votes=c(134270,10087),audience_score=c(74,52))
+predict(lmfit, testmovie,interval='prediction',level=0.95)
+
+```
+
+The model predicts at a 95% confidence: 
+
+* Tarzan will have an imdb_rating of in the interval (6.35,8.24); (actual is 7.2)
+
+* The Dance of the Dead to have imdb_rating in the interval (5.49,7.39); (actual is 5.9)
+
+* * *
+
+## Part 6: Conclusion
+
+I set out to determine any linear relationship between imdb_score and other variables. The relationship was narrowed down to:
+
+* imdb_rating ~ imdb_num_votes + critics_score + audience_score 
+
+This model has an adjusted R-square implying 80.20% of the variance can be explained
+
+* The sample data on certain variables like imdb_num_votes is skewed and does appear to normal, but given the sample size > 30, have included it in the model.
+* The model was tested with 2 movies having large variation in the explanatory variables(compared to the mean) with satisfactory results  
+
+I think there would be room for improvement using a classification model to predict variables such as top200_box or nomination.
+
