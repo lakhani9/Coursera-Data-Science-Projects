@@ -1,0 +1,257 @@
+---
+title: 'Project: Regression Model - Coursera project'
+author: "N. Lakhani"
+date: "21 January 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE,warnings=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message=FALSE)
+
+```
+
+
+
+### Report on: Miles Per Gallon - Automatic vs Manual Transmission
+  
+
+#### Executive Summary 
+
+This project uses linear regression to explore relationships between Miles per gallon (mpg) and other variables in the mtcars dataset. The mtcars dataset has data on fuel consumption and 11 aspects of automobile design and performance for 32 automobiles (1973-74 models). The goal of the analysis is to answer: 
+
+* Is an automatic or manual transmission better for MPG?
+* Quantify the MPG difference between the 2 different transmissions
+
+
+In additon, this document provides analysis on several other questions of interest.
+Based on the analysis, I conclude that:
+
+* mpg for manual transmission is better than automatic by 7.25. This was validated by various statistical tests at a 95% confidence level
+* the best model for predicting mpg is: mpg = 37.22 - 3.87 * wt - 0.03 * hp. This model has adj R-sq of 0.81 with a very small p value.  The model accounts for 81% of the mpg variance, the rest being explained by residuals
+* The residual distribution is random, which indicates the soundness of the model, even given that the mpg data is not completely normal
+
+
+#### 1. Data
+
+Details of the dataset **mtcars** is provided in the Appendix - section 1
+   
+
+```{r,echo=FALSE,results='hide',warning=FALSE}
+# load libraries needed
+
+library(ggplot2)
+library(GGally)
+library(MASS)
+library(car)
+
+
+```
+
+
+#### 2. Exploratory Data Analysis
+
+
+```{r echo=FALSE,results='hide'}
+
+aggregate(mpg ~ am,data=mtcars,FUN=mean)
+aggregate(mpg ~ am,data=mtcars,FUN=sd)
+```
+
+
+
+A summary of the basic analysis is provided below:
+
+* Average MPG for manual drive is 24.39 with sd of 6.16; for automatic drive is 17.14 with sd of 3.83. So the variance (& sd) in mpg for each transmission is large, perhaps due to size of the sample size, outliers or other factors such as # of cylinders. etc. More analysis follows in Appendix section 2 on this. 
+* A histogram and qq-norm plot in appendix section 3, shows the data distribution is not normal.  
+
+We further explore the data visually with plots:
+
+
+```{r exploredata visually,echo=FALSE}
+
+theme_set(theme_classic())
+
+auto <- subset(mtcars,am==1)
+man <- subset(mtcars,am==0)
+mtcars$trans <- factor (mtcars$am,labels=c('Automatic','Manual'))
+g1 <- ggplot(mtcars,aes(x=trans,y=mpg)) + geom_boxplot(aes(fill=trans)) +
+      geom_dotplot(binaxis='y',stackdir='center',dotsize=0.5,fill='red',binwidth=1) +
+       labs(title='Miles per gallon vs drive: automatic & manual',x='Transmission type',y='MPG')
+g1      
+
+
+```
+
+
+The exploratory plots (box and density) indicate that:
+
+* mpg for manual transmission has a larger variance as compared to automatic. There are some data points outside the quantiles for both transmissions as indicated by the box plot (outliers). This could indicate the influence of other variables such cyl on mpg 
+* median mpg of manual is higher vs automatic. This is analyzed further.
+
+
+We further examine if the mean mpg for the 2 transmission types are statistically different using a t-test at a 95% confidence level. 
+
+A null hypothesis (H0) stating that **nothing is going on and the mean mpg's are not statistically different is tested using a t-test.**  
+  
+The t-test results show that p < 0.05, hence the null hypothesis is rejected implying that *there is something going on and the mean mpgs for the 2 transmissions are different*, as also indicated by the difference in the 2 mean's (24.39-17.14 = 7.25), which lies between the CI [3.2,11.28].  Details of the t-test are in the appendix, section 4
+
+
+
+#### 3. Exploring relationships to identify key influencing variables:
+
+We do this initially using the R corr function to eliminate some variables and make the model simpler. The pairs plot also indicate the relationships visually:
+
+```{r,echo=FALSE}
+
+cor(mtcars[c(1:9)])[,1]
+
+
+```
+
+
+The correlation coefficients and pairs plot indicate that:
+
+* variable qsec has the lowest absolute coefficient (0.41), so we will eliminate this from further analysis, keeping the rest (absolute value > 0.5) for further detailed investigation.
+* Negative coefficients of cyl,disp,hp,wt indicate reduction in mpg as these variable take on higher values
+
+
+
+#### 4. Model evaluation and selection
+
+The approach taken to arrive at a simpler relationship using model selection is:
+
+* Start with the full model (mpg ~., excluding qsec) using function **lm**. Examine adj R-squared and p values to determine significance of each variable 
+* Use the function stepAIC to rank the variables based on their influence and eliminate variables with low p values (<0.05) resulting in a reduced model.
+* Run the regression function lm on the reduced model and evaluate it for suitability based on adj R-squared and p values. 
+* Further evaluate the reduced model vs other models for best fit evaluation using Anova. Also look at residuals and other fit parameters for validation of best fit model
+
+```{r,results='hide',echo=FALSE,results='hide'}
+
+mtcars$cyl <- factor(mtcars$cyl)
+mtcars$vs <- factor(mtcars$vs)
+mtcars$am <- factor(mtcars$am)
+mtcars <- mtcars[,-c(7,11)]
+
+fit_am <- lm(mpg ~ am,data=mtcars)
+
+
+fit_total <- lm(mpg ~.,mtcars)
+
+
+```
+
+
+The step wise model selection and regression summaries provides the following insights:
+
+* for the simplest model mpg ~ am, adjusted R-squared is 0.36 indicating that **am** explains only 36% of the variance in mpg, this model ignores many other inluencing variables
+* for the full model (mpg ~.), R-squared is 0.81 indicating that this model  explains 81% of the variation in mpg. The model though is complex with all variables included and yet none of the p values are < 0.05 for any predictor. Hence simplification is needed.
+* The stepAIC function helps arrive at at simpler model mpg ~ wt + hp.   
+
+
+```{r}
+step <- stepAIC(fit_total,k=25,trace=0)
+
+
+fit_final <- lm(mpg ~ wt + hp + am,mtcars)
+summary(fit_final)
+
+
+anova (fit_am, fit_final, fit_total)
+
+```
+
+
+We next examine the final model (mpg ~ wt + hp + am) for residuals and influence of each selected variable using function stepAIC.  
+
+* the final model is: mpg = 37 - 3.87 * wt - 0.03 * hp. This model has adj R-sq of 0.81 with small p values.  The model accounts for 81% of the mpg variance
+* The residual plots shown in the appendix 5 brings out the random distribution of the residuals for this model. Also shown in the Residuals vs Leverage plot are outliers like Maserati, Chrysler perhaps due to the number of cylinders and hence larger wt
+
+
+#### 5. Conclusion
+
+
+* The analysis helps determine that transmission types influences mpg significantly with manual mpg being higher than automatic.   
+* A model selection was explored, which helped arrive at  final model of mpg ~ wt + hp. This model has adj R-squared of 0.82. While other variables also influence mpg to various degrees, they are also very likely a factor in influencing wt and hp.
+
+
+
+### Appendix
+
+#### 1. Description of mtcars dataset
+
+mtcars has 32 observations on 11 variables:  
+ 1	 mpg:	  Miles/(US) gallon  
+ 2	 cyl:	  Number of cylinders  
+ 3	 disp:	Displacement (cu.in.)  
+ 4	 hp:	  Gross horsepower  
+ 5	 drat:  Rear axle ratio  
+ 6	 wt:	  Weight (1000 lbs)  
+ 7	 qsec:	1/4 mile time  
+ 8	 vs:	  V/S  
+ 9	 am:	  Transmission (0 = automatic, 1 = manual)  
+10	 gear:	Number of forward gears  
+11	 carb:	Number of carburetors
+
+
+#### 2. Summary of mtcars dataset
+
+```{r}
+
+summary(mtcars)
+str(mtcars)
+
+```
+
+
+#### 3. Histogram of mpg data by transmission type
+
+```{r}
+ggplot(mtcars,aes(mpg),fill=factor(am)) + geom_histogram() + facet_grid(am~.) 
+qqnorm(mtcars$mpg)
+
+```
+
+
+
+#### 4. Density plots for mpg
+
+```{r}
+# density plots for the 2 transmission types 
+plot(density(man$mpg),xlim=c(0,40),xlab='mpg',main='Density of mpg by transmission type')
+lines(density(auto$mpg))
+polygon(density(man$mpg),col='mistyrose')     
+polygon(density(auto$mpg),col='powderblue')
+legend('topright',c('automatic','manual'),col=c('mistyrose','powderblue'),lty=c(1,1),lwd=c(2,2),bty='')
+
+```
+
+#### 5. Plot - relationship between variables
+
+```{r}
+pairs(mtcars[,c(1,2,3,4,5,6,7)], panel=panel.smooth, col=9+mtcars$wt)
+
+```
+
+
+#### 6. T-test results of mpg vs transmission type
+
+```{r,echo=FALSE}
+
+t.test(auto$mpg,man$mpg)
+
+```
+
+#### 7. Residual Analysis - plots
+
+
+```{r,echo=FALSE}
+layout(matrix(c(1,2,3,4),2,2))
+plot(fit_final,pch=16)
+confint(fit_final)
+
+```
+
+
